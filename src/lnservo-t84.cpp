@@ -10,14 +10,15 @@ ISR(TIM0_OVF_vect) {
 		// Disable the compare interrupts
 		TIMSK0 &= ~((1 << OCF0A)| (1 << OCF0A));
 	} else if (servotranscount  > 9) { // End of cycle, pulse our servos
-		// Set compare interupts
-		TIMSK0 |= (1 << OCF0A)| (1 << OCF0A); // Enable just the overflow interrupt
+		TCNT0 = 0;
 		// Pull servo pins high
 		PORTA |= (1<<PA5);
 		PORTA |= (1<<PA6);		
+		// Set compare interupts
+		TIFR0 |= (1 << OCF0A) | (1 << OCF1B);
+		TIMSK0 |= (1 << OCF0A)| (1 << OCF0A); // Enable just the overflow interrupt
 	}
 	servotranscount++;
-	PINA = 0xFF;
 }
 
 ISR(TIM0_COMPA_vect) { // First servo
@@ -37,10 +38,9 @@ void setupIO(){
 	// Configure Servo pins as output
 	DDRA |= (1 << PA5);
 	DDRA |= (1 << PA6);
-	DDRA = 0xFF;
 	
 	// Pull servo pins low
-	PORTA |= (1<<PA5);
+	PORTA &= ~(1<<PA5);
 	PORTA &= ~(1<<PA6);
 
 }
@@ -58,6 +58,16 @@ void setupTimer0() {
 	TCCR0B = ((1<<CS01) | (1<<CS00)); // No forced compares, "normal" mode, prescaler /64
 }
 
+void notifySwitchRequest(  uint16_t Address, uint8_t Output, uint8_t Direction ) {
+	if (Address == 1) {
+		if (Direction == 0) {
+			OCR0A = 127;
+		} else {
+			OCR0A = 255;	
+		}
+	}
+}
+
 int main(){
 	setupIO();
 	setupTimer0();
@@ -68,6 +78,8 @@ int main(){
 	while (1) {
 	    LnPacket = LocoNet.receive() ;
 	    if( LnPacket ) {
+			OCR0B++;
+			LocoNet.processSwitchSensorMessage( LnPacket );
 		}
 	}
 	return 0;
